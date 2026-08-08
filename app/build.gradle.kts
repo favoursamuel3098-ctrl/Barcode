@@ -12,8 +12,8 @@ android {
         applicationId = "com.offlineqr.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "2.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -73,10 +73,10 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraVersion")
     implementation("androidx.camera:camera-view:$cameraVersion")
 
-    // ZXing - pure offline encode + decode
+    // ZXing
     implementation("com.google.zxing:core:3.5.3")
 
-    // Accompanist permissions
+    // Permissions
     implementation("com.google.accompanist:accompanist-permissions:0.36.0")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
