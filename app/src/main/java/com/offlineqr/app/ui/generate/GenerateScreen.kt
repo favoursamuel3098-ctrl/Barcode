@@ -1,10 +1,15 @@
 package com.offlineqr.app.ui.generate
 
+import android.Manifest
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.location.Location
+import android.location.LocationListener
+import android.location.LocationManager
 import android.os.Build
+import android.os.Bundle
 import android.os.Environment
 import android.provider.MediaStore
 import android.widget.Toast
@@ -22,6 +27,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
@@ -44,18 +51,24 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
 import com.offlineqr.app.util.QrUtils
 import java.io.File
 import java.io.FileOutputStream
 import java.io.OutputStream
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun GenerateScreen() {
     var text by remember { mutableStateOf("") }
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    var currentLocation by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
+    val locationPermission = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
 
     Column(
         modifier = Modifier
@@ -101,6 +114,41 @@ fun GenerateScreen() {
             ) { Text("Contact") }
         }
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Location button
+        Button(
+            onClick = {
+                if (locationPermission.status.isGranted) {
+                    getCurrentLocation(context) { loc ->
+                        if (loc != null) {
+                            val geo = "geo:${loc.latitude},${loc.longitude}"
+                            text = geo
+                            currentLocation = "Lat: ${String.format("%.5f", loc.latitude)}  Lng: ${String.format("%.5f", loc.longitude)}"
+                            Toast.makeText(context, "Location added!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Could not get location. Try again outdoors.", Toast.LENGTH_LONG).show()
+                        }
+                    }
+                } else {
+                    locationPermission.launchPermissionRequest()
+                }
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.LocationOn, contentDescription = null)
+            Spacer(modifier = Modifier.size(8.dp))
+            Text("Use My Live Location")
+        }
+
+        currentLocation?.let {
+            Text(
+                text = it,
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
@@ -119,9 +167,7 @@ fun GenerateScreen() {
         Spacer(modifier = Modifier.height(24.dp))
 
         qrBitmap?.let { bitmap ->
-            Card(
-                modifier = Modifier.padding(8.dp)
-            ) {
+            Card(modifier = Modifier.padding(8.dp)) {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = "Generated QR Code",
@@ -133,27 +179,89 @@ fun GenerateScreen() {
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 IconButton(onClick = {
                     clipboard.setText(AnnotatedString(text))
                     Toast.makeText(context, "Copied text", Toast.LENGTH_SHORT).show()
                 }) {
                     Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                 }
-                IconButton(onClick = {
-                    shareBitmap(context, bitmap)
-                }) {
+                IconButton(onClick = { shareBitmap(context, bitmap) }) {
                     Icon(Icons.Default.Share, contentDescription = "Share")
                 }
-                IconButton(onClick = {
-                    saveBitmap(context, bitmap)
-                }) {
+                IconButton(onClick = { saveBitmap(context, bitmap) }) {
                     Icon(Icons.Default.Save, contentDescription = "Save")
+                }
+                // Open in maps if it looks like a geo location
+                if (text.startsWith("geo:") || text.contains(",")) {
+                    IconButton(onClick = { openInMaps(context, text) }) {
+                        Icon(Icons.Default.Map, contentDescription = "Open Map")
+                    }
                 }
             }
         }
+    }
+}
+
+private fun getCurrentLocation(context: Context, onResult: (Location?) -> Unit) {
+    try {
+        val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == android.content.pm.PackageManager.PERMISSION_GRANTED
+        if (!hasFine) {
+            onResult(null)
+            return
+        }
+
+        // Try last known location first (fast)
+        val last = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+            ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
+        if (last != null) {
+            onResult(last)
+            return
+        }
+
+        // Request a fresh update
+        val listener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                onResult(location)
+                locationManager.removeUpdates(this)
+            }
+            override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
+            override fun onProviderEnabled(provider: String) {}
+            override fun onProviderDisabled(provider: String) {}
+        }
+
+        if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+            locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, listener)
+        } else if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+            locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0L, 0f, listener)
+        } else {
+            onResult(null)
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        onResult(null)
+    }
+}
+
+private fun openInMaps(context: Context, text: String) {
+    try {
+        val uri = when {
+            text.startsWith("geo:") -> android.net.Uri.parse(text)
+            else -> {
+                // Try to parse lat,lng
+                val parts = text.replace(" ", "").split(",")
+                if (parts.size >= 2) {
+                    android.net.Uri.parse("geo:${parts[0]},${parts[1]}")
+                } else {
+                    android.net.Uri.parse("geo:0,0?q=${android.net.Uri.encode(text)}")
+                }
+            }
+        }
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "No maps app found", Toast.LENGTH_SHORT).show()
     }
 }
 
