@@ -23,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FlashOff
 import androidx.compose.material.icons.filled.FlashOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.OpenInBrowser
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -167,6 +168,8 @@ fun ScanScreen() {
                                 }) {
                                     Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                                 }
+
+                                // Open website
                                 if (text.startsWith("http://") || text.startsWith("https://")) {
                                     IconButton(onClick = {
                                         try {
@@ -176,6 +179,16 @@ fun ScanScreen() {
                                         Icon(Icons.Default.OpenInBrowser, contentDescription = "Open")
                                     }
                                 }
+
+                                // Open in Maps (geo: or lat,lng style)
+                                if (text.startsWith("geo:") || looksLikeCoordinates(text)) {
+                                    IconButton(onClick = {
+                                        openInMaps(context, text)
+                                    }) {
+                                        Icon(Icons.Default.Map, contentDescription = "Open Map")
+                                    }
+                                }
+
                                 Button(onClick = { scannedText = null }) {
                                     Text("Scan again")
                                 }
@@ -189,5 +202,38 @@ fun ScanScreen() {
 
     DisposableEffect(Unit) {
         onDispose { }
+    }
+}
+
+private fun looksLikeCoordinates(text: String): Boolean {
+    val cleaned = text.trim().replace(" ", "")
+    val parts = cleaned.split(",")
+    if (parts.size < 2) return false
+    return try {
+        parts[0].toDouble()
+        parts[1].toDouble()
+        true
+    } catch (e: Exception) {
+        false
+    }
+}
+
+private fun openInMaps(context: Context, text: String) {
+    try {
+        val uri = when {
+            text.startsWith("geo:") -> Uri.parse(text)
+            else -> {
+                val parts = text.trim().replace(" ", "").split(",")
+                if (parts.size >= 2) {
+                    Uri.parse("geo:${parts[0]},${parts[1]}")
+                } else {
+                    Uri.parse("geo:0,0?q=${Uri.encode(text)}")
+                }
+            }
+        }
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Toast.makeText(context, "No maps app found on this phone", Toast.LENGTH_SHORT).show()
     }
 }
