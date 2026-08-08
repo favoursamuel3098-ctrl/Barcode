@@ -23,8 +23,8 @@ import com.offlineqr.app.ui.scan.ScanScreen
 import com.offlineqr.app.ui.theme.OfflineQRTheme
 
 class MainActivity : ComponentActivity() {
-    override fun onCreate(savedInstancee: Bundle?) {
-        super.onCreate(savedInstancee)
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             OfflineQRTheme {
