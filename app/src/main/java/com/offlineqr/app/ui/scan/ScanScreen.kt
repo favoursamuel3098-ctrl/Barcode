@@ -52,7 +52,9 @@ import java.util.concurrent.Executors
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun ScanScreen() {
+fun ScanScreen(
+    onShowMap: (Double, Double) -> Unit = { _, _ -> }
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val cameraPermission = rememberPermissionState(Manifest.permission.CAMERA)
@@ -64,16 +66,11 @@ fun ScanScreen() {
     Column(modifier = Modifier.fillMaxSize()) {
         if (!cameraPermission.status.isGranted) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
+                modifier = Modifier.fillMaxSize().padding(24.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(
-                        "Camera permission is required to scan QR codes and barcodes.",
-                        style = MaterialTheme.typography.bodyLarge
-                    )
+                    Text("Camera permission is required to scan QR codes and barcodes.", style = MaterialTheme.typography.bodyLarge)
                     Spacer(modifier = Modifier.height(16.dp))
                     Button(onClick = { cameraPermission.launchPermissionRequest() }) {
                         Text("Grant Camera Permission")
@@ -88,27 +85,20 @@ fun ScanScreen() {
                             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                             scaleType = PreviewView.ScaleType.FILL_CENTER
                         }
-
                         val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
                         cameraProviderFuture.addListener({
                             val cameraProvider = cameraProviderFuture.get()
-
                             val preview = Preview.Builder().build().also {
                                 it.surfaceProvider = previewView.surfaceProvider
                             }
-
                             val analysis = ImageAnalysis.Builder()
                                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                 .build()
                                 .also {
-                                    it.setAnalyzer(
-                                        Executors.newSingleThreadExecutor(),
-                                        BarcodeAnalyzer { result ->
-                                            scannedText = result
-                                        }
-                                    )
+                                    it.setAnalyzer(Executors.newSingleThreadExecutor(), BarcodeAnalyzer { result ->
+                                        scannedText = result
+                                    })
                                 }
-
                             try {
                                 cameraProvider.unbindAll()
                                 camera = cameraProvider.bindToLifecycle(
@@ -121,7 +111,6 @@ fun ScanScreen() {
                                 e.printStackTrace()
                             }
                         }, ContextCompat.getMainExecutor(ctx))
-
                         previewView
                     },
                     modifier = Modifier.fillMaxSize()
@@ -132,9 +121,7 @@ fun ScanScreen() {
                         torchEnabled = !torchEnabled
                         camera?.cameraControl?.enableTorch(torchEnabled)
                     },
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(16.dp)
+                    modifier = Modifier.align(Alignment.TopEnd).padding(16.dp)
                 ) {
                     Icon(
                         imageVector = if (torchEnabled) Icons.Default.FlashOn else Icons.Default.FlashOff,
@@ -151,15 +138,8 @@ fun ScanScreen() {
                             .padding(16.dp)
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "Scanned:",
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                            Text(
-                                text = text,
-                                style = MaterialTheme.typography.bodyLarge,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
+                            Text("Scanned:", style = MaterialTheme.typography.labelMedium)
+                            Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(vertical = 8.dp))
                             androidx.compose.foundation.layout.Row {
                                 IconButton(onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -169,7 +149,6 @@ fun ScanScreen() {
                                     Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                                 }
 
-                                // Open website
                                 if (text.startsWith("http://") || text.startsWith("https://")) {
                                     IconButton(onClick = {
                                         try {
@@ -180,12 +159,12 @@ fun ScanScreen() {
                                     }
                                 }
 
-                                // Open in Maps (geo: or lat,lng style)
-                                if (text.startsWith("geo:") || looksLikeCoordinates(text)) {
+                                val coords = parseCoordinates(text)
+                                if (coords != null) {
                                     IconButton(onClick = {
-                                        openInMaps(context, text)
+                                        onShowMap(coords.first, coords.second)
                                     }) {
-                                        Icon(Icons.Default.Map, contentDescription = "Open Map")
+                                        Icon(Icons.Default.Map, contentDescription = "View Map")
                                     }
                                 }
 
@@ -205,35 +184,21 @@ fun ScanScreen() {
     }
 }
 
-private fun looksLikeCoordinates(text: String): Boolean {
-    val cleaned = text.trim().replace(" ", "")
-    val parts = cleaned.split(",")
-    if (parts.size < 2) return false
+private fun parseCoordinates(text: String): Pair<Double, Double>? {
     return try {
-        parts[0].toDouble()
-        parts[1].toDouble()
-        true
-    } catch (e: Exception) {
-        false
-    }
-}
-
-private fun openInMaps(context: Context, text: String) {
-    try {
-        val uri = when {
-            text.startsWith("geo:") -> Uri.parse(text)
-            else -> {
-                val parts = text.trim().replace(" ", "").split(",")
-                if (parts.size >= 2) {
-                    Uri.parse("geo:${parts[0]},${parts[1]}")
-                } else {
-                    Uri.parse("geo:0,0?q=${Uri.encode(text)}")
-                }
-            }
+        if (text.startsWith("geo:")) {
+            val parts = text.removePrefix("geo:").split(",", ";", "?")
+            val lat = parts[0].toDouble()
+            val lng = parts[1].toDouble()
+            Pair(lat, lng)
+        } else {
+            val cleaned = text.trim().replace(" ", "")
+            val parts = cleaned.split(",")
+            if (parts.size >= 2) {
+                Pair(parts[0].toDouble(), parts[1].toDouble())
+            } else null
         }
-        val intent = Intent(Intent.ACTION_VIEW, uri)
-        context.startActivity(intent)
     } catch (e: Exception) {
-        Toast.makeText(context, "No maps app found on this phone", Toast.LENGTH_SHORT).show()
+        null
     }
 }
