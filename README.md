@@ -1,40 +1,39 @@
-# Offline QR v1.1.0
+# Offline QR v2.0.0
 
-**100% offline QR Code & Barcode Generator + Scanner** for Android.
+**Free Offline QR Code & Barcode Generator + Scanner** for Android.
 
-No internet required for core features, no Google Play Services, no API keys, no tracking.
-
-## New in 1.1.0
-- **Live Location** – Get your current GPS location
-- **Geo QR** – One tap to create a QR code with your location
-- **Open in Maps** – Scan a location QR and open it in Google Maps / any maps app
+## What's new in 2.0.0
+- **In-app Live Map** – See the map inside the app (OpenStreetMap)
+- Location QR generation
+- Open scanned locations on the map
 
 ## Features
 
 ### Generate
 - Create QR codes from any text
-- Quick templates: URL, Wi-Fi, Contact (vCard)
-- **Use My Live Location** button
-- Share or save the generated image
+- Quick templates: URL, Wi-Fi, Contact
+- **Use My Live Location** → creates Geo QR
+- View location on live map inside the app
+- Share / Save image
 
 ### Scan
-- Live camera scanning of QR codes and common barcodes
-- Torch / flashlight toggle
-- Copy result, open URLs, or **Open in Maps**
-- Supports: QR, Code 128, Code 39, EAN-13/8, UPC, Data Matrix, Aztec, PDF417, etc.
+- Live camera scanning
+- Torch toggle
+- Copy, Open URL, or **View on Map**
+- Supports most common barcode formats
 
-## How to get the latest APK (from your phone)
+## Download APK
 
-1. Go to the **Actions** tab: https://github.com/favoursamuel3098-ctrl/Barcode/actions
-2. Select **Build APK**
-3. Tap **Run workflow** → Run
-4. Wait 3–6 minutes
-5. Download the **OfflineQR-debug** artifact
+1. Go to **Actions**: https://github.com/favoursamuel3098-ctrl/Barcode/actions
+2. Open the latest successful **Build APK** run
+3. Download the **OfflineQR-debug** artifact
+4. Install on your phone
+
+Or go to **Releases** after you publish one.
 
 ## Requirements
-- Android 7.0 (API 24) or higher
-- Camera (for scanning)
-- Location (optional, for Geo QR)
+- Android 7.0+
+- Camera + Location (optional) + Internet (only for map tiles)
 
 ## Privacy
-Everything stays on your device. No data is collected or sent anywhere.
+No tracking, no ads, no account. Location stays on your device.
