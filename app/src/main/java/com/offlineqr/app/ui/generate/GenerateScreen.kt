@@ -62,10 +62,14 @@ import java.io.OutputStream
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
-fun GenerateScreen() {
+fun GenerateScreen(
+    onShowMap: (Double, Double) -> Unit = { _, _ -> }
+) {
     var text by remember { mutableStateOf("") }
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var currentLocation by remember { mutableStateOf<String?>(null) }
+    var lastLat by remember { mutableStateOf<Double?>(null) }
+    var lastLng by remember { mutableStateOf<Double?>(null) }
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
     val locationPermission = rememberPermissionState(Manifest.permission.ACCESS_FINE_LOCATION)
@@ -100,23 +104,13 @@ fun GenerateScreen() {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Button(
-                onClick = { text = "https://" },
-                modifier = Modifier.weight(1f)
-            ) { Text("URL") }
-            Button(
-                onClick = { text = "WIFI:T:WPA;S:MyNetwork;P:password123;;" },
-                modifier = Modifier.weight(1f)
-            ) { Text("WiFi") }
-            Button(
-                onClick = { text = "BEGIN:VCARD\nVERSION:3.0\nFN:John Doe\nTEL:+1234567890\nEND:VCARD" },
-                modifier = Modifier.weight(1f)
-            ) { Text("Contact") }
+            Button(onClick = { text = "https://" }, modifier = Modifier.weight(1f)) { Text("URL") }
+            Button(onClick = { text = "WIFI:T:WPA;S:MyNetwork;P:password123;;" }, modifier = Modifier.weight(1f)) { Text("WiFi") }
+            Button(onClick = { text = "BEGIN:VCARD\nVERSION:3.0\nFN:John Doe\nTEL:+1234567890\nEND:VCARD" }, modifier = Modifier.weight(1f)) { Text("Contact") }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Location button
         Button(
             onClick = {
                 if (locationPermission.status.isGranted) {
@@ -124,10 +118,12 @@ fun GenerateScreen() {
                         if (loc != null) {
                             val geo = "geo:${loc.latitude},${loc.longitude}"
                             text = geo
+                            lastLat = loc.latitude
+                            lastLng = loc.longitude
                             currentLocation = "Lat: ${String.format("%.5f", loc.latitude)}  Lng: ${String.format("%.5f", loc.longitude)}"
                             Toast.makeText(context, "Location added!", Toast.LENGTH_SHORT).show()
                         } else {
-                            Toast.makeText(context, "Could not get location. Try again outdoors.", Toast.LENGTH_LONG).show()
+                            Toast.makeText(context, "Could not get location. Try outdoors.", Toast.LENGTH_LONG).show()
                         }
                     }
                 } else {
@@ -142,11 +138,7 @@ fun GenerateScreen() {
         }
 
         currentLocation?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 4.dp)
-            )
+            Text(text = it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -171,9 +163,7 @@ fun GenerateScreen() {
                 Image(
                     bitmap = bitmap.asImageBitmap(),
                     contentDescription = "Generated QR Code",
-                    modifier = Modifier
-                        .size(280.dp)
-                        .padding(16.dp)
+                    modifier = Modifier.size(280.dp).padding(16.dp)
                 )
             }
 
@@ -182,7 +172,7 @@ fun GenerateScreen() {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 IconButton(onClick = {
                     clipboard.setText(AnnotatedString(text))
-                    Toast.makeText(context, "Copied text", Toast.LENGTH_SHORT).show()
+                    Toast.makeText(context, "Copied", Toast.LENGTH_SHORT).show()
                 }) {
                     Icon(Icons.Default.ContentCopy, contentDescription = "Copy")
                 }
@@ -192,10 +182,9 @@ fun GenerateScreen() {
                 IconButton(onClick = { saveBitmap(context, bitmap) }) {
                     Icon(Icons.Default.Save, contentDescription = "Save")
                 }
-                // Open in maps if it looks like a geo location
-                if (text.startsWith("geo:") || text.contains(",")) {
-                    IconButton(onClick = { openInMaps(context, text) }) {
-                        Icon(Icons.Default.Map, contentDescription = "Open Map")
+                if (lastLat != null && lastLng != null) {
+                    IconButton(onClick = { onShowMap(lastLat!!, lastLng!!) }) {
+                        Icon(Icons.Default.Map, contentDescription = "View Map")
                     }
                 }
             }
@@ -211,16 +200,12 @@ private fun getCurrentLocation(context: Context, onResult: (Location?) -> Unit) 
             onResult(null)
             return
         }
-
-        // Try last known location first (fast)
         val last = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
             ?: locationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
         if (last != null) {
             onResult(last)
             return
         }
-
-        // Request a fresh update
         val listener = object : LocationListener {
             override fun onLocationChanged(location: Location) {
                 onResult(location)
@@ -230,7 +215,6 @@ private fun getCurrentLocation(context: Context, onResult: (Location?) -> Unit) 
             override fun onProviderEnabled(provider: String) {}
             override fun onProviderDisabled(provider: String) {}
         }
-
         if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
             locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0L, 0f, listener)
         } else if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
@@ -244,40 +228,13 @@ private fun getCurrentLocation(context: Context, onResult: (Location?) -> Unit) 
     }
 }
 
-private fun openInMaps(context: Context, text: String) {
-    try {
-        val uri = when {
-            text.startsWith("geo:") -> android.net.Uri.parse(text)
-            else -> {
-                // Try to parse lat,lng
-                val parts = text.replace(" ", "").split(",")
-                if (parts.size >= 2) {
-                    android.net.Uri.parse("geo:${parts[0]},${parts[1]}")
-                } else {
-                    android.net.Uri.parse("geo:0,0?q=${android.net.Uri.encode(text)}")
-                }
-            }
-        }
-        val intent = Intent(Intent.ACTION_VIEW, uri)
-        context.startActivity(intent)
-    } catch (e: Exception) {
-        Toast.makeText(context, "No maps app found", Toast.LENGTH_SHORT).show()
-    }
-}
-
 private fun shareBitmap(context: Context, bitmap: Bitmap) {
     try {
         val cachePath = File(context.cacheDir, "images")
         cachePath.mkdirs()
         val file = File(cachePath, "qr_share.png")
-        FileOutputStream(file).use { out ->
-            bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-        }
-        val uri = androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
-        )
+        FileOutputStream(file).use { out -> bitmap.compress(Bitmap.CompressFormat.PNG, 100, out) }
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "image/png"
             putExtra(Intent.EXTRA_STREAM, uri)
@@ -285,7 +242,7 @@ private fun shareBitmap(context: Context, bitmap: Bitmap) {
         }
         context.startActivity(Intent.createChooser(intent, "Share QR Code"))
     } catch (e: Exception) {
-        Toast.makeText(context, "Share failed: ${e.message}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Share failed", Toast.LENGTH_SHORT).show()
     }
 }
 
@@ -294,23 +251,22 @@ private fun saveBitmap(context: Context, bitmap: Bitmap) {
     var fos: OutputStream? = null
     try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            val contentValues = ContentValues().apply {
+            val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/png")
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/OfflineQR")
             }
-            val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+            val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
             fos = uri?.let { context.contentResolver.openOutputStream(it) }
         } else {
-            val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-            val image = File(imagesDir, filename)
-            fos = FileOutputStream(image)
+            val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+            fos = FileOutputStream(File(dir, filename))
         }
         fos?.use {
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)
-            Toast.makeText(context, "Saved to Pictures/OfflineQR", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Saved", Toast.LENGTH_SHORT).show()
         }
     } catch (e: Exception) {
-        Toast.makeText(context, "Save failed: ${e.message}", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "Save failed", Toast.LENGTH_SHORT).show()
     }
 }
